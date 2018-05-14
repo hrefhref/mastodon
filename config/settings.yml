@@ -30,7 +30,7 @@ defaults: &defaults
   system_font_ui: false
   noindex: false
   flavour: 'glitch'
-  skin: 'socialisme'
+  skin: 'default'
   notification_emails:
     follow: false
     reblog: false
