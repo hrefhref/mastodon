@@ -39,6 +39,7 @@ import ComposerTextarea from './textarea';
 import ComposerUploadForm from './upload_form';
 import ComposerWarning from './warning';
 import ComposerHashtagWarning from './hashtag_warning';
+import ComposerDirectWarning from './direct_warning';
 
 //  Utils.
 import { countableText } from 'flavours/glitch/util/counter';
@@ -46,15 +47,30 @@ import { me } from 'flavours/glitch/util/initial_state';
 import { isMobile } from 'flavours/glitch/util/is_mobile';
 import { assignHandlers } from 'flavours/glitch/util/react_helpers';
 import { wrap } from 'flavours/glitch/util/redux_helpers';
+import { privacyPreference } from 'flavours/glitch/util/privacy_preference';
 
 //  State mapping.
 function mapStateToProps (state) {
   const inReplyTo = state.getIn(['compose', 'in_reply_to']);
+  const replyPrivacy = inReplyTo ? state.getIn(['statuses', inReplyTo, 'visibility']) : null;
+  const sideArmBasePrivacy = state.getIn(['local_settings', 'side_arm']);
+  const sideArmRestrictedPrivacy = replyPrivacy ? privacyPreference(replyPrivacy, sideArmBasePrivacy) : null;
+  let sideArmPrivacy = null;
+  switch (state.getIn(['local_settings', 'side_arm_reply_mode'])) {
+    case 'copy':
+      sideArmPrivacy = replyPrivacy;
+      break;
+    case 'restrict':
+      sideArmPrivacy = sideArmRestrictedPrivacy;
+      break;
+  }
+  sideArmPrivacy = sideArmPrivacy || sideArmBasePrivacy;
   return {
     acceptContentTypes: state.getIn(['media_attachments', 'accept_content_types']).toArray().join(','),
     advancedOptions: state.getIn(['compose', 'advanced_options']),
     amUnlocked: !state.getIn(['accounts', me, 'locked']),
     focusDate: state.getIn(['compose', 'focusDate']),
+    caretPosition: state.getIn(['compose', 'caretPosition']),
     isSubmitting: state.getIn(['compose', 'is_submitting']),
     isUploading: state.getIn(['compose', 'is_uploading']),
     layout: state.getIn(['local_settings', 'layout']),
@@ -62,10 +78,11 @@ function mapStateToProps (state) {
     preselectDate: state.getIn(['compose', 'preselectDate']),
     privacy: state.getIn(['compose', 'privacy']),
     progress: state.getIn(['compose', 'progress']),
+    inReplyTo: inReplyTo ? state.getIn(['statuses', inReplyTo]) : null,
     replyAccount: inReplyTo ? state.getIn(['statuses', inReplyTo, 'account']) : null,
     replyContent: inReplyTo ? state.getIn(['statuses', inReplyTo, 'contentHtml']) : null,
     resetFileKey: state.getIn(['compose', 'resetFileKey']),
-    sideArm: state.getIn(['local_settings', 'side_arm']),
+    sideArm: sideArmPrivacy,
     sensitive: state.getIn(['compose', 'sensitive']),
     showSearch: state.getIn(['search', 'submitted']) && !state.getIn(['search', 'hidden']),
     spoiler: state.getIn(['compose', 'spoiler']),
@@ -116,7 +133,6 @@ const handlers = {
   handleEmoji (data) {
     const { textarea: { selectionStart } } = this;
     const { onInsertEmoji } = this.props;
-    this.caretPos = selectionStart + data.native.length + 1;
     if (onInsertEmoji) {
       onInsertEmoji(selectionStart, data);
     }
@@ -138,7 +154,6 @@ const handlers = {
   //  Selects a suggestion from the autofill.
   handleSelect (tokenStart, token, value) {
     const { onSelectSuggestion } = this.props;
-    this.caretPos = null;
     if (onSelectSuggestion) {
       onSelectSuggestion(tokenStart, token, value);
     }
@@ -190,18 +205,7 @@ class Composer extends React.Component {
     assignHandlers(this, handlers);
 
     //  Instance variables.
-    this.caretPos = null;
     this.textarea = null;
-  }
-
-  //  If this is the update where we've finished uploading,
-  //  save the last caret position so we can restore it below!
-  componentWillReceiveProps (nextProps) {
-    const { textarea } = this;
-    const { isUploading } = this.props;
-    if (textarea && isUploading && !nextProps.isUploading) {
-      this.caretPos = textarea.selectionStart;
-    }
   }
 
   //  Tells our state the composer has been mounted.
@@ -227,17 +231,13 @@ class Composer extends React.Component {
   //      - Replying to more than one user, selects any usernames past
   //        the first; this provides a convenient shortcut to drop
   //        everyone else from the conversation.
-  // - If we've just finished uploading an image, and have a saved
-  //   caret position, restores the cursor to that position after the
-  //   text changes.
   componentDidUpdate (prevProps) {
     const {
-      caretPos,
       textarea,
     } = this;
     const {
       focusDate,
-      isUploading,
+      caretPosition,
       isSubmitting,
       preselectDate,
       text,
@@ -245,14 +245,14 @@ class Composer extends React.Component {
     let selectionEnd, selectionStart;
 
     //  Caret/selection handling.
-    if (focusDate !== prevProps.focusDate || (prevProps.isUploading && !isUploading && !isNaN(caretPos) && caretPos !== null)) {
+    if (focusDate !== prevProps.focusDate) {
       switch (true) {
       case preselectDate !== prevProps.preselectDate:
         selectionStart = text.search(/\s/) + 1;
         selectionEnd = text.length;
         break;
-      case !isNaN(caretPos) && caretPos !== null:
-        selectionStart = selectionEnd = caretPos;
+      case !isNaN(caretPosition) && caretPosition !== null:
+        selectionStart = selectionEnd = caretPosition;
         break;
       default:
         selectionStart = selectionEnd = text.length;
@@ -303,8 +303,7 @@ class Composer extends React.Component {
       onUpload,
       privacy,
       progress,
-      replyAccount,
-      replyContent,
+      inReplyTo,
       resetFileKey,
       sensitive,
       showSearch,
@@ -319,6 +318,16 @@ class Composer extends React.Component {
 
     return (
       <div className='composer'>
+        {privacy === 'direct' ? <ComposerDirectWarning /> : null}
+        {privacy === 'private' && amUnlocked ? <ComposerWarning /> : null}
+        {privacy !== 'public' && APPROX_HASHTAG_RE.test(text) ? <ComposerHashtagWarning /> : null}
+        {inReplyTo && (
+          <ComposerReply
+            status={inReplyTo}
+            intl={intl}
+            onCancel={onCancelReply}
+          />
+        )}
         <ComposerSpoiler
           hidden={!spoiler}
           intl={intl}
@@ -326,16 +335,6 @@ class Composer extends React.Component {
           onSubmit={handleSubmit}
           text={spoilerText}
         />
-        {privacy === 'private' && amUnlocked ? <ComposerWarning /> : null}
-        {privacy !== 'public' && APPROX_HASHTAG_RE.test(text) ? <ComposerHashtagWarning /> : null}
-        {replyContent ? (
-          <ComposerReply
-            account={replyAccount}
-            content={replyContent}
-            intl={intl}
-            onCancel={onCancelReply}
-          />
-        ) : null}
         <ComposerTextarea
           advancedOptions={advancedOptions}
           autoFocus={!showSearch && !isMobile(window.innerWidth, layout)}
@@ -345,6 +344,7 @@ class Composer extends React.Component {
           onPaste={onUpload}
           onPickEmoji={handleEmoji}
           onSubmit={handleSubmit}
+          onSecondarySubmit={handleSecondarySubmit}
           onSuggestionsClearRequested={onClearSuggestions}
           onSuggestionsFetchRequested={onFetchSuggestions}
           onSuggestionSelected={handleSelect}
@@ -408,6 +408,7 @@ Composer.propTypes = {
   advancedOptions: ImmutablePropTypes.map,
   amUnlocked: PropTypes.bool,
   focusDate: PropTypes.instanceOf(Date),
+  caretPosition: PropTypes.number,
   isSubmitting: PropTypes.bool,
   isUploading: PropTypes.bool,
   layout: PropTypes.string,
@@ -415,8 +416,7 @@ Composer.propTypes = {
   preselectDate: PropTypes.instanceOf(Date),
   privacy: PropTypes.string,
   progress: PropTypes.number,
-  replyAccount: PropTypes.string,
-  replyContent: PropTypes.string,
+  inReplyTo: ImmutablePropTypes.map,
   resetFileKey: PropTypes.number,
   sideArm: PropTypes.string,
   sensitive: PropTypes.bool,

@@ -6,6 +6,8 @@ $error-red: #df405a;        // Cerise
 $warning-red: #ff5050;      // Sunset Orange
 $gold-star: #ca8f04;        // Dark Goldenrod
 
+$red-bookmark: $warning-red;
+
 // Values from the classic Mastodon UI
 $classic-base-color: #282c37;         // Midnight Express
 $classic-primary-color: #9baec8;      // Echo Blue
@@ -46,6 +48,8 @@ $cjk-langs: ja, ko, zh-CN, zh-HK, zh-TW;
 $media-modal-media-max-width: 100%;
 // put margins on top and bottom of image to avoid the screen covered by image.
 $media-modal-media-max-height: 80%;
+
+$no-gap-breakpoint: 415px;
 
 // Avatar border size (8% default, 100% for rounded avatars)
 $ui-avatar-border-size: 8%;

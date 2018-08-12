@@ -8,8 +8,13 @@ import {
   blockAccount,
   unblockAccount,
   unmuteAccount,
+  pinAccount,
+  unpinAccount,
 } from 'flavours/glitch/actions/accounts';
-import { mentionCompose } from 'flavours/glitch/actions/compose';
+import {
+  mentionCompose,
+  directCompose
+} from 'flavours/glitch/actions/compose';
 import { initMuteModal } from 'flavours/glitch/actions/mutes';
 import { initReport } from 'flavours/glitch/actions/reports';
 import { openModal } from 'flavours/glitch/actions/modal';
@@ -67,11 +72,27 @@ const mapDispatchToProps = (dispatch, { intl }) => ({
     dispatch(mentionCompose(account, router));
   },
 
+  onDirect (account, router) {
+    dispatch(directCompose(account, router));
+  },
+
+  onDirect (account, router) {
+    dispatch(directCompose(account, router));
+  },
+
   onReblogToggle (account) {
     if (account.getIn(['relationship', 'showing_reblogs'])) {
       dispatch(followAccount(account.get('id'), false));
     } else {
       dispatch(followAccount(account.get('id'), true));
+    }
+  },
+
+  onEndorseToggle (account) {
+    if (account.getIn(['relationship', 'endorsed'])) {
+      dispatch(unpinAccount(account.get('id')));
+    } else {
+      dispatch(pinAccount(account.get('id')));
     }
   },
 

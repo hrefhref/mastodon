@@ -7,6 +7,7 @@ import StatusIcons from './status_icons';
 import StatusContent from './status_content';
 import StatusActionBar from './status_action_bar';
 import AttachmentList from './attachment_list';
+import { FormattedMessage } from 'react-intl';
 import ImmutablePureComponent from 'react-immutable-pure-component';
 import { MediaGallery, Video } from 'flavours/glitch/util/async-components';
 import { HotKeys } from 'react-hotkeys';
@@ -32,6 +33,8 @@ export default class Status extends ImmutablePureComponent {
     onFavourite: PropTypes.func,
     onReblog: PropTypes.func,
     onDelete: PropTypes.func,
+    onDirect: PropTypes.func,
+    onMention: PropTypes.func,
     onPin: PropTypes.func,
     onOpenMedia: PropTypes.func,
     onOpenVideo: PropTypes.func,
@@ -151,6 +154,11 @@ export default class Status extends ImmutablePureComponent {
       muted,
       prepend,
     } = this.props;
+
+    // Prevent a crash when node is undefined. Not completely sure why this
+    // happens, might be because status === null.
+    if (node === undefined) return;
+
     const autoCollapseSettings = settings.getIn(['collapsed', 'auto']);
 
     if (function () {
@@ -233,7 +241,7 @@ export default class Status extends ImmutablePureComponent {
         status.getIn(['reblog', 'id'], status.get('id'))
       }`;
     }
-    if (e.button === 0) {
+    if (e.button === 0 && !(e.ctrlKey || e.altKey || e.metaKey)) {
       if (isCollapsed) this.setCollapsed(false);
       else if (e.shiftKey) {
         this.setCollapsed(true);
@@ -257,8 +265,8 @@ export default class Status extends ImmutablePureComponent {
     }
   };
 
-  handleOpenVideo = startTime => {
-    this.props.onOpenVideo(this.props.status.getIn(['media_attachments', 0]), startTime);
+  handleOpenVideo = (media, startTime) => {
+    this.props.onOpenVideo(media, startTime);
   }
 
   handleHotkeyReply = e => {
@@ -358,6 +366,21 @@ export default class Status extends ImmutablePureComponent {
       );
     }
 
+    if (status.get('filtered') || status.getIn(['reblog', 'filtered'])) {
+      const minHandlers = this.props.muted ? {} : {
+        moveUp: this.handleHotkeyMoveUp,
+        moveDown: this.handleHotkeyMoveDown,
+      };
+
+      return (
+        <HotKeys handlers={minHandlers}>
+          <div className='status__wrapper status__wrapper--filtered focusable' tabIndex='0'>
+            <FormattedMessage id='status.filtered' defaultMessage='Filtered' />
+          </div>
+        </HotKeys>
+      );
+    }
+
     //  If user backgrounds for collapsed statuses are enabled, then we
     //  initialize our background accordingly. This will only be rendered if
     //  the status is collapsed.
@@ -400,7 +423,7 @@ export default class Status extends ImmutablePureComponent {
         mediaIcon = 'video-camera';
       } else {  //  Media type is 'image' or 'gifv'
         media = (
-          <Bundle fetchComponent={MediaGallery} loading={this.renderLoadingMediaGallery} >
+          <Bundle fetchComponent={MediaGallery} loading={this.renderLoadingMediaGallery}>
             {Component => (
               <Component
                 media={attachments}

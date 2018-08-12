@@ -13,7 +13,7 @@ module Mastodon
     end
 
     def patch
-      0
+      3
     end
 
     def pre
@@ -21,7 +21,7 @@ module Mastodon
     end
 
     def flags
-      'rc3'
+      ''
     end
 
     def to_a
@@ -32,8 +32,12 @@ module Mastodon
       [to_a.join('.'), flags].join
     end
 
+    def repository
+      'glitch-soc/mastodon'
+    end
+
     def source_base_url
-      'https://github.com/glitch-soc/mastodon'
+      "https://github.com/#{repository}"
     end
 
     # specify git tag or commit hash here
@@ -47,6 +51,10 @@ module Mastodon
       else
         source_base_url
       end
+    end
+
+    def user_agent
+      @user_agent ||= "#{HTTP::Request::USER_AGENT} (Mastodon/#{Version}; +http#{Rails.configuration.x.use_https ? 's' : ''}://#{Rails.configuration.x.web_domain}/)"
     end
   end
 end

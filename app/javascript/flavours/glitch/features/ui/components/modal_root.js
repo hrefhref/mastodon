@@ -44,6 +44,18 @@ export default class ModalRoot extends React.PureComponent {
     onClose: PropTypes.func.isRequired,
   };
 
+  getSnapshotBeforeUpdate () {
+    return { visible: !!this.props.type };
+  }
+
+  componentDidUpdate (prevProps, prevState, { visible }) {
+    if (visible) {
+      document.body.classList.add('with-modals--active');
+    } else {
+      document.body.classList.remove('with-modals--active');
+    }
+  }
+
   renderLoading = modalId => () => {
     return ['MEDIA', 'VIDEO', 'BOOST', 'FAVOURITE', 'DOODLE', 'CONFIRM', 'ACTIONS'].indexOf(modalId) === -1 ? <ModalLoading /> : null;
   }
@@ -59,7 +71,7 @@ export default class ModalRoot extends React.PureComponent {
     const visible = !!type;
 
     return (
-      <Base onClose={onClose} noEsc={props.noEsc}>
+      <Base onClose={onClose} noEsc={props ? props.noEsc : false}>
         {visible && (
           <BundleContainer fetchComponent={MODAL_COMPONENTS[type]} loading={this.renderLoading(type)} error={this.renderError} renderDelay={200}>
             {(SpecificComponent) => <SpecificComponent {...props} onClose={onClose} />}

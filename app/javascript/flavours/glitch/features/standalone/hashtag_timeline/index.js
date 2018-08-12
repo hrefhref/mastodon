@@ -2,12 +2,10 @@ import React from 'react';
 import { connect } from 'react-redux';
 import PropTypes from 'prop-types';
 import StatusListContainer from 'flavours/glitch/features/ui/containers/status_list_container';
-import {
-  refreshHashtagTimeline,
-  expandHashtagTimeline,
-} from 'flavours/glitch/actions/timelines';
+import { expandHashtagTimeline } from 'flavours/glitch/actions/timelines';
 import Column from 'flavours/glitch/components/column';
 import ColumnHeader from 'flavours/glitch/components/column_header';
+import { connectHashtagStream } from 'flavours/glitch/actions/streaming';
 
 @connect()
 export default class HashtagTimeline extends React.PureComponent {
@@ -28,22 +26,23 @@ export default class HashtagTimeline extends React.PureComponent {
   componentDidMount () {
     const { dispatch, hashtag } = this.props;
 
-    dispatch(refreshHashtagTimeline(hashtag));
-
-    this.polling = setInterval(() => {
-      dispatch(refreshHashtagTimeline(hashtag));
-    }, 10000);
+    dispatch(expandHashtagTimeline(hashtag));
+    this.disconnect = dispatch(connectHashtagStream(hashtag));
   }
 
   componentWillUnmount () {
-    if (typeof this.polling !== 'undefined') {
-      clearInterval(this.polling);
-      this.polling = null;
+    if (this.disconnect) {
+      this.disconnect();
+      this.disconnect = null;
     }
   }
 
-  handleLoadMore = () => {
-    this.props.dispatch(expandHashtagTimeline(this.props.hashtag));
+  handleLoadMore = maxId => {
+    this.props.dispatch(expandHashtagTimeline(this.props.hashtag, { maxId }));
+  }
+
+  shouldUpdateScroll = (prevRouterProps, { location }) => {
+    return !(location.state && location.state.mastodonModalOpen)
   }
 
   render () {
@@ -60,8 +59,9 @@ export default class HashtagTimeline extends React.PureComponent {
         <StatusListContainer
           trackScroll={false}
           scrollKey='standalone_hashtag_timeline'
+          shouldUpdateScroll={this.shouldUpdateScroll}
           timelineId={`hashtag:${hashtag}`}
-          loadMore={this.handleLoadMore}
+          onLoadMore={this.handleLoadMore}
         />
       </Column>
     );

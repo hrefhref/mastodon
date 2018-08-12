@@ -9,8 +9,9 @@ import { Redirect, withRouter } from 'react-router-dom';
 import { isMobile } from 'flavours/glitch/util/is_mobile';
 import { debounce } from 'lodash';
 import { uploadCompose, resetCompose } from 'flavours/glitch/actions/compose';
-import { refreshHomeTimeline } from 'flavours/glitch/actions/timelines';
-import { refreshNotifications } from 'flavours/glitch/actions/notifications';
+import { expandHomeTimeline } from 'flavours/glitch/actions/timelines';
+import { expandNotifications } from 'flavours/glitch/actions/notifications';
+import { fetchFilters } from 'flavours/glitch/actions/filters';
 import { clearHeight } from 'flavours/glitch/actions/height_cache';
 import { WrappedSwitch, WrappedRoute } from 'flavours/glitch/util/react_router_helpers';
 import UploadArea from './components/upload_area';
@@ -99,10 +100,6 @@ const keyMap = {
 @withRouter
 export default class UI extends React.Component {
 
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-
   static propTypes = {
     dispatch: PropTypes.func.isRequired,
     children: PropTypes.node,
@@ -112,7 +109,9 @@ export default class UI extends React.Component {
     navbarUnder: PropTypes.bool,
     isComposing: PropTypes.bool,
     hasComposingText: PropTypes.bool,
-    location: PropTypes.object,
+    match: PropTypes.object.isRequired,
+    location: PropTypes.object.isRequired,
+    history: PropTypes.object.isRequired,
     intl: PropTypes.object.isRequired,
     dropdownMenuIsOpen: PropTypes.bool,
   };
@@ -200,7 +199,7 @@ export default class UI extends React.Component {
 
   handleServiceWorkerPostMessage = ({ data }) => {
     if (data.type === 'navigate') {
-      this.context.router.history.push(data.path);
+      this.props.history.push(data.path);
     } else {
       console.warn('Unknown message type:', data.type);
     }
@@ -219,8 +218,9 @@ export default class UI extends React.Component {
       navigator.serviceWorker.addEventListener('message', this.handleServiceWorkerPostMessage);
     }
 
-    this.props.dispatch(refreshHomeTimeline());
-    this.props.dispatch(refreshNotifications());
+    this.props.dispatch(expandHomeTimeline());
+    this.props.dispatch(expandNotifications());
+    setTimeout(() => this.props.dispatch(fetchFilters()), 500);
   }
 
   componentDidMount () {
@@ -269,7 +269,7 @@ export default class UI extends React.Component {
   handleHotkeyNew = e => {
     e.preventDefault();
 
-    const element = this.node.querySelector('.compose-form__autosuggest-wrapper textarea');
+    const element = this.node.querySelector('.composer--textarea textarea');
 
     if (element) {
       element.focus();
@@ -279,7 +279,7 @@ export default class UI extends React.Component {
   handleHotkeySearch = e => {
     e.preventDefault();
 
-    const element = this.node.querySelector('.search__input');
+    const element = this.node.querySelector('.drawer--search input');
 
     if (element) {
       element.focus();
@@ -305,10 +305,11 @@ export default class UI extends React.Component {
   }
 
   handleHotkeyBack = () => {
-    if (window.history && window.history.length === 1) {
-      this.context.router.history.push('/');
+    // if history is exhausted, or we would leave mastodon, just go to root.
+    if (window.history.state) {
+      this.props.history.goBack();
     } else {
-      this.context.router.history.goBack();
+      this.props.history.push('/');
     }
   }
 
@@ -318,54 +319,54 @@ export default class UI extends React.Component {
 
   handleHotkeyToggleHelp = () => {
     if (this.props.location.pathname === '/keyboard-shortcuts') {
-      this.context.router.history.goBack();
+      this.props.history.goBack();
     } else {
-      this.context.router.history.push('/keyboard-shortcuts');
+      this.props.history.push('/keyboard-shortcuts');
     }
   }
 
   handleHotkeyGoToHome = () => {
-    this.context.router.history.push('/timelines/home');
+    this.props.history.push('/timelines/home');
   }
 
   handleHotkeyGoToNotifications = () => {
-    this.context.router.history.push('/notifications');
+    this.props.history.push('/notifications');
   }
 
   handleHotkeyGoToLocal = () => {
-    this.context.router.history.push('/timelines/public/local');
+    this.props.history.push('/timelines/public/local');
   }
 
   handleHotkeyGoToFederated = () => {
-    this.context.router.history.push('/timelines/public');
+    this.props.history.push('/timelines/public');
   }
 
   handleHotkeyGoToDirect = () => {
-    this.context.router.history.push('/timelines/direct');
+    this.props.history.push('/timelines/direct');
   }
 
   handleHotkeyGoToStart = () => {
-    this.context.router.history.push('/getting-started');
+    this.props.history.push('/getting-started');
   }
 
   handleHotkeyGoToFavourites = () => {
-    this.context.router.history.push('/favourites');
+    this.props.history.push('/favourites');
   }
 
   handleHotkeyGoToPinned = () => {
-    this.context.router.history.push('/pinned');
+    this.props.history.push('/pinned');
   }
 
   handleHotkeyGoToProfile = () => {
-    this.context.router.history.push(`/accounts/${me}`);
+    this.props.history.push(`/accounts/${me}`);
   }
 
   handleHotkeyGoToBlocked = () => {
-    this.context.router.history.push('/blocks');
+    this.props.history.push('/blocks');
   }
 
   handleHotkeyGoToMuted = () => {
-    this.context.router.history.push('/mutes');
+    this.props.history.push('/mutes');
   }
 
   render () {
