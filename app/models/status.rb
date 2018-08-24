@@ -234,6 +234,13 @@ class Status < ApplicationRecord
   before_validation :set_local
 
   class << self
+    def search_for(term, limit = 20)
+       pattern = sanitize_sql_like(term)
+       pattern = "#{pattern}"
+       Status.unscoped {
+               Status.where('tsv @@ plainto_tsquery(?)', pattern).where(visibility: [:public, :unlisted]).order(updated_at: :desc).limit(limit)
+       }
+    end
     def cache_ids
       left_outer_joins(:status_stat).select('statuses.id, greatest(statuses.updated_at, status_stats.updated_at) AS updated_at')
     end

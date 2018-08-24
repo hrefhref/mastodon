@@ -3,7 +3,7 @@
 class Api::V1::SearchController < Api::BaseController
   include Authorization
 
-  RESULTS_LIMIT = 10
+  RESULTS_LIMIT = 20
 
   before_action -> { doorkeeper_authorize! :read, :'read:search' }
   before_action :require_user!
@@ -11,7 +11,7 @@ class Api::V1::SearchController < Api::BaseController
   respond_to :json
 
   def index
-    @search = Search.new(search)
+    @search = Search.new(search_results)
     render json: @search, serializer: REST::SearchSerializer
   end
 
