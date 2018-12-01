@@ -10,6 +10,7 @@ import Icon from 'flavours/glitch/components/icon';
 
 //  Utils.
 import { conditionalRender } from 'flavours/glitch/util/react_helpers';
+import { signOutLink } from 'flavours/glitch/util/backend_links';
 
 //  Messages.
 const messages = defineMessages({
@@ -46,6 +47,8 @@ const messages = defineMessages({
 //  The component.
 export default function DrawerHeader ({
   columns,
+  unreadNotifications,
+  showNotificationsBadge,
   intl,
   onSettingsClick,
 }) {
@@ -77,7 +80,12 @@ export default function DrawerHeader ({
           aria-label={intl.formatMessage(messages.notifications)}
           title={intl.formatMessage(messages.notifications)}
           to='/notifications'
-        ><Icon icon='bell' /></Link>
+        >
+          <span className='icon-badge-wrapper'>
+            <Icon icon='bell' />
+            { showNotificationsBadge && unreadNotifications > 0 && <div className='icon-badge' />}
+          </span>
+        </Link>
       ))}
       {renderForColumn('COMMUNITY', (
         <Link
@@ -102,7 +110,7 @@ export default function DrawerHeader ({
       <a
         aria-label={intl.formatMessage(messages.logout)}
         data-method='delete'
-        href='/auth/sign_out'
+        href={ signOutLink }
         title={intl.formatMessage(messages.logout)}
       ><Icon icon='sign-out' /></a>
     </nav>
@@ -112,6 +120,8 @@ export default function DrawerHeader ({
 //  Props.
 DrawerHeader.propTypes = {
   columns: ImmutablePropTypes.list,
+  unreadNotifications: PropTypes.number,
+  showNotificationsBadge: PropTypes.bool,
   intl: PropTypes.object,
   onSettingsClick: PropTypes.func,
 };

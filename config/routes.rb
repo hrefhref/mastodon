@@ -21,8 +21,10 @@ Rails.application.routes.draw do
 
   get '.well-known/host-meta', to: 'well_known/host_meta#show', as: :host_meta, defaults: { format: 'xml' }
   get '.well-known/webfinger', to: 'well_known/webfinger#show', as: :webfinger
+  get '.well-known/change-password', to: redirect('/auth/edit')
   get 'manifest', to: 'manifests#show', defaults: { format: 'json' }
   get 'intent', to: 'intents#show'
+  get 'custom.css', to: 'custom_css#show', as: :custom_css
 
   devise_scope :user do
     get '/invite/:invite_code', to: 'auth/registrations#new', as: :public_invite
@@ -38,6 +40,7 @@ Rails.application.routes.draw do
   }
 
   get '/users/:username', to: redirect('/@%{username}'), constraints: lambda { |req| req.format.nil? || req.format.html? }
+  get '/authorize_follow', to: redirect { |_, request| "/authorize_interaction?#{request.params.to_query}" }
 
   resources :accounts, path: 'users', only: [:show], param: :username do
     resources :stream_entries, path: 'updates', only: [:show] do
@@ -178,7 +181,7 @@ Rails.application.routes.draw do
       resource :reset, only: [:create]
       resource :silence, only: [:create, :destroy]
       resource :suspension, only: [:new, :create, :destroy]
-      resources :statuses, only: [:index, :create, :update, :destroy]
+      resources :statuses, only: [:index, :show, :create, :update, :destroy]
 
       resource :confirmation, only: [:create] do
         collection do
@@ -265,6 +268,12 @@ Rails.application.routes.draw do
       resources :custom_emojis, only: [:index]
       resources :suggestions, only: [:index, :destroy]
 
+      resources :conversations, only: [:index, :destroy] do
+        member do
+          post :read
+        end
+      end
+
       get '/search', to: 'search#index', as: :search
 
       resources :follows,      only: [:create]
@@ -277,7 +286,7 @@ Rails.application.routes.draw do
       end
       resources :favourites,   only: [:index]
       resources :bookmarks,    only: [:index]
-      resources :reports,      only: [:index, :create]
+      resources :reports,      only: [:create]
       resources :filters,      only: [:index, :create, :show, :update, :destroy]
       resources :endorsements, only: [:index]
 
@@ -304,8 +313,12 @@ Rails.application.routes.draw do
       resources :notifications, only: [:index, :show, :destroy] do
         collection do
           post :clear
-          post :dismiss
+          post :dismiss # Deprecated
           delete :destroy_multiple
+        end
+
+        member do
+          post :dismiss
         end
       end
 

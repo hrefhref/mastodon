@@ -32,9 +32,6 @@
 #  suspended               :boolean          default(FALSE), not null
 #  locked                  :boolean          default(FALSE), not null
 #  header_remote_url       :string           default(""), not null
-#  statuses_count          :integer          default(0), not null
-#  followers_count         :integer          default(0), not null
-#  following_count         :integer          default(0), not null
 #  last_webfingered_at     :datetime
 #  inbox_url               :string           default(""), not null
 #  outbox_url              :string           default(""), not null
@@ -49,7 +46,7 @@
 #
 
 class Account < ApplicationRecord
-  USERNAME_RE = /[a-z0-9_]+([a-z0-9_\.]+[a-z0-9_]+)?/i
+  USERNAME_RE = /[a-z0-9_]+([a-z0-9_\.-]+[a-z0-9_]+)?/i
   MENTION_RE  = /(?<=^|[^\/[:word:]])@((#{USERNAME_RE})(?:@[a-z0-9\.\-]+[a-z0-9]+)?)/i
 
   include AccountAvatar
@@ -58,8 +55,11 @@ class Account < ApplicationRecord
   include AccountInteractions
   include Attachmentable
   include Paginable
+  include AccountCounters
 
-  MAX_NOTE_LENGTH = 500
+  MAX_DISPLAY_NAME_LENGTH = (ENV['MAX_DISPLAY_NAME_CHARS'] || 30).to_i
+  MAX_NOTE_LENGTH = (ENV['MAX_BIO_CHARS'] || 500).to_i
+  MAX_FIELDS = (ENV['MAX_PROFILE_FIELDS'] || 4).to_i
 
   enum protocol: [:ostatus, :activitypub]
 
@@ -76,9 +76,9 @@ class Account < ApplicationRecord
   validates :username, format: { with: /\A[a-z0-9_]+\z/i }, length: { maximum: 30 }, if: -> { local? && will_save_change_to_username? }
   validates_with UniqueUsernameValidator, if: -> { local? && will_save_change_to_username? }
   validates_with UnreservedUsernameValidator, if: -> { local? && will_save_change_to_username? }
-  validates :display_name, length: { maximum: 30 }, if: -> { local? && will_save_change_to_display_name? }
+  validates :display_name, length: { maximum: MAX_DISPLAY_NAME_LENGTH }, if: -> { local? && will_save_change_to_display_name? }
   validate :note_length_does_not_exceed_length_limit, if: -> { local? && will_save_change_to_note? }
-  validates :fields, length: { maximum: 4 }, if: -> { local? && will_save_change_to_fields? }
+  validates :fields, length: { maximum: MAX_FIELDS }, if: -> { local? && will_save_change_to_fields? }
 
   # Timelines
   has_many :stream_entries, inverse_of: :account, dependent: :destroy
@@ -122,14 +122,13 @@ class Account < ApplicationRecord
 
   scope :remote, -> { where.not(domain: nil) }
   scope :local, -> { where(domain: nil) }
-  scope :without_followers, -> { where(followers_count: 0) }
-  scope :with_followers, -> { where('followers_count > 0') }
   scope :expiring, ->(time) { remote.where.not(subscription_expires_at: nil).where('subscription_expires_at < ?', time) }
   scope :partitioned, -> { order(Arel.sql('row_number() over (partition by domain)')) }
   scope :silenced, -> { where(silenced: true) }
   scope :suspended, -> { where(suspended: true) }
   scope :without_suspended, -> { where(suspended: false) }
   scope :recent, -> { reorder(id: :desc) }
+  scope :bots, -> { where(actor_type: %w(Application Service)) }
   scope :alphabetic, -> { order(domain: :asc, username: :asc) }
   scope :by_domain_accounts, -> { group(:domain).select(:domain, 'COUNT(*) AS accounts_count').order('accounts_count desc') }
   scope :matches_username, ->(value) { where(arel_table[:username].matches("#{value}%")) }
@@ -226,11 +225,19 @@ class Account < ApplicationRecord
   end
 
   def fields_attributes=(attributes)
-    fields = []
+    fields     = []
+    old_fields = self[:fields] || []
 
     if attributes.is_a?(Hash)
       attributes.each_value do |attr|
         next if attr[:name].blank?
+
+        previous = old_fields.find { |item| item['value'] == attr[:value] }
+
+        if previous && previous['verified_at'].present?
+          attr[:verified_at] = previous['verified_at']
+        end
+
         fields << attr
       end
     end
@@ -239,12 +246,15 @@ class Account < ApplicationRecord
   end
 
   def build_fields
-    return if fields.size >= 4
+    return if fields.size >= MAX_FIELDS
 
-    raw_fields = self[:fields] || []
-    add_fields = 4 - raw_fields.size
-    add_fields.times { raw_fields << { name: '', value: '' } }
-    self.fields = raw_fields
+    tmp = self[:fields] || []
+
+    (MAX_FIELDS - tmp.size).times do
+      tmp << { name: '', value: '' }
+    end
+
+    self.fields = tmp
   end
 
   def magic_key
@@ -297,17 +307,52 @@ class Account < ApplicationRecord
   end
 
   class Field < ActiveModelSerializers::Model
-    attributes :name, :value, :account, :errors
+    attributes :name, :value, :verified_at, :account, :errors
 
-    def initialize(account, attr)
-      @account = account
-      @name    = attr['name'].strip[0, 255]
-      @value   = attr['value'].strip[0, 255]
-      @errors  = {}
+    def initialize(account, attributes)
+      @account     = account
+      @attributes  = attributes
+      @name        = attributes['name'].strip[0, string_limit]
+      @value       = attributes['value'].strip[0, string_limit]
+      @verified_at = attributes['verified_at']&.to_datetime
+      @errors      = {}
+    end
+
+    def verified?
+      verified_at.present?
+    end
+
+    def value_for_verification
+      @value_for_verification ||= begin
+        if account.local?
+          value
+        else
+          ActionController::Base.helpers.strip_tags(value)
+        end
+      end
+    end
+
+    def verifiable?
+      value_for_verification.present? && value_for_verification.start_with?('http://', 'https://')
+    end
+
+    def mark_verified!
+      @verified_at = Time.now.utc
+      @attributes['verified_at'] = @verified_at
     end
 
     def to_h
-      { name: @name, value: @value }
+      { name: @name, value: @value, verified_at: @verified_at }
+    end
+
+    private
+
+    def string_limit
+      if account.local?
+        255
+      else
+        2047
+      end
     end
   end
 
@@ -340,7 +385,9 @@ class Account < ApplicationRecord
         LIMIT ?
       SQL
 
-      find_by_sql([sql, limit])
+      records = find_by_sql([sql, limit])
+      ActiveRecord::Associations::Preloader.new.preload(records, :account_stat)
+      records
     end
 
     def advanced_search_for(terms, account, limit = 10, following = false)
@@ -367,7 +414,7 @@ class Account < ApplicationRecord
           LIMIT ?
         SQL
 
-        find_by_sql([sql, account.id, account.id, account.id, limit])
+        records = find_by_sql([sql, account.id, account.id, account.id, limit])
       else
         sql = <<-SQL.squish
           SELECT
@@ -383,8 +430,11 @@ class Account < ApplicationRecord
           LIMIT ?
         SQL
 
-        find_by_sql([sql, account.id, account.id, limit])
+        records = find_by_sql([sql, account.id, account.id, limit])
       end
+
+      ActiveRecord::Associations::Preloader.new.preload(records, :account_stat)
+      records
     end
 
     private

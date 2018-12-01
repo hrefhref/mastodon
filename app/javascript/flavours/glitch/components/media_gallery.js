@@ -6,7 +6,7 @@ import IconButton from './icon_button';
 import { defineMessages, injectIntl, FormattedMessage } from 'react-intl';
 import { isIOS } from 'flavours/glitch/util/is_mobile';
 import classNames from 'classnames';
-import { autoPlayGif, displaySensitiveMedia } from 'flavours/glitch/util/initial_state';
+import { autoPlayGif, displayMedia } from 'flavours/glitch/util/initial_state';
 
 const messages = defineMessages({
   hidden: {
@@ -70,11 +70,16 @@ class Item extends React.PureComponent {
   handleClick = (e) => {
     const { index, onClick } = this.props;
 
-    if (e.button === 0) {
+    if (e.button === 0 && !(e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       onClick(index);
     }
 
+    e.stopPropagation();
+  }
+
+  handleMouseDown = (e) => {
+    e.preventDefault();
     e.stopPropagation();
   }
 
@@ -163,7 +168,8 @@ class Item extends React.PureComponent {
             sizes={sizes}
             alt={attachment.get('description')}
             title={attachment.get('description')}
-            style={{ objectPosition: `${x}% ${y}%` }} />
+            style={{ objectPosition: letterbox ? null : `${x}% ${y}%` }}
+          />
         </a>
       );
     } else if (attachment.get('type') === 'gifv') {
@@ -174,11 +180,13 @@ class Item extends React.PureComponent {
           <video
             className={`media-gallery__item-gifv-thumbnail${letterbox ? ' letterbox' : ''}`}
             aria-label={attachment.get('description')}
+            title={attachment.get('description')}
             role='application'
             src={attachment.get('url')}
             onClick={this.handleClick}
             onMouseEnter={this.handleMouseEnter}
             onMouseLeave={this.handleMouseLeave}
+            onMouseDown={this.handleMouseDown}
             autoPlay={autoPlay}
             loop
             muted
@@ -190,7 +198,7 @@ class Item extends React.PureComponent {
     }
 
     return (
-      <div className={classNames('media-gallery__item', { standalone })} key={attachment.get('id')} style={{ left: left, top: top, right: right, bottom: bottom, width: `${width}%`, height: `${height}%` }}>
+      <div className={classNames('media-gallery__item', { standalone, letterbox })} key={attachment.get('id')} style={{ left: left, top: top, right: right, bottom: bottom, width: `${width}%`, height: `${height}%` }}>
         {thumbnail}
       </div>
     );
@@ -207,6 +215,7 @@ export default class MediaGallery extends React.PureComponent {
     standalone: PropTypes.bool,
     letterbox: PropTypes.bool,
     fullwidth: PropTypes.bool,
+    hidden: PropTypes.bool,
     media: ImmutablePropTypes.list.isRequired,
     size: PropTypes.object,
     onOpenMedia: PropTypes.func.isRequired,
@@ -218,12 +227,20 @@ export default class MediaGallery extends React.PureComponent {
   };
 
   state = {
-    visible: this.props.revealed === undefined ? (!this.props.sensitive || displaySensitiveMedia) : this.props.revealed,
+    visible: this.props.revealed === undefined ? (displayMedia !== 'hide_all' && !this.props.sensitive || displayMedia === 'show_all') : this.props.revealed,
   };
 
   componentWillReceiveProps (nextProps) {
     if (!is(nextProps.media, this.props.media)) {
-      this.setState({ visible: !nextProps.sensitive });
+      this.setState({ visible: nextProps.revealed === undefined ? (displayMedia !== 'hide_all' && !nextProps.sensitive || displayMedia === 'show_all') : nextProps.revealed });
+    }
+  }
+
+  componentDidUpdate (prevProps) {
+    if (this.node && this.node.offsetWidth && this.node.offsetWidth != this.state.width) {
+      this.setState({
+        width: this.node.offsetWidth,
+      });
     }
   }
 
@@ -236,8 +253,8 @@ export default class MediaGallery extends React.PureComponent {
   }
 
   handleRef = (node) => {
-    if (node /*&& this.isStandaloneEligible()*/) {
-      // offsetWidth triggers a layout, so only calculate when we need to
+    this.node = node;
+    if (node && node.offsetWidth && node.offsetWidth != this.state.width) {
       this.setState({
         width: node.offsetWidth,
       });
@@ -258,8 +275,14 @@ export default class MediaGallery extends React.PureComponent {
 
     const style = {};
 
+    const computedClass = classNames('media-gallery', { 'full-width': fullwidth });
+
     if (this.isStandaloneEligible() && width) {
       style.height = width / this.props.media.getIn([0, 'meta', 'small', 'aspect']);
+    } else if (width) {
+      style.height = width / (16/9);
+    } else {
+      return (<div className={computedClass} ref={this.handleRef}></div>);
     }
 
     if (!visible) {
@@ -278,8 +301,6 @@ export default class MediaGallery extends React.PureComponent {
         children = media.take(4).map((attachment, i) => <Item key={attachment.get('id')} onClick={this.handleClick} attachment={attachment} index={i} size={size} letterbox={letterbox} displayWidth={width} />);
       }
     }
-
-    const computedClass = classNames('media-gallery', `size-${size}`, { 'full-width': fullwidth });
 
     return (
       <div className={computedClass} style={style} ref={this.handleRef}>

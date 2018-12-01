@@ -1,7 +1,6 @@
 import api from 'flavours/glitch/util/api';
 
 import { deleteFromTimelines } from './timelines';
-import { fetchStatusCard } from './cards';
 
 export const STATUS_FETCH_REQUEST = 'STATUS_FETCH_REQUEST';
 export const STATUS_FETCH_SUCCESS = 'STATUS_FETCH_SUCCESS';
@@ -38,7 +37,6 @@ export function fetchStatus(id) {
     const skipLoading = getState().getIn(['statuses', id], null) !== null;
 
     dispatch(fetchContext(id));
-    dispatch(fetchStatusCard(id));
 
     if (skipLoading) {
       return;
@@ -79,7 +77,7 @@ export function redraft(status) {
   };
 };
 
-export function deleteStatus(id, withRedraft = false) {
+export function deleteStatus(id, router, withRedraft = false) {
   return (dispatch, getState) => {
     const status = getState().getIn(['statuses', id]);
 
@@ -91,6 +89,10 @@ export function deleteStatus(id, withRedraft = false) {
 
       if (withRedraft) {
         dispatch(redraft(status));
+
+        if (!getState().getIn(['compose', 'mounted'])) {
+          router.push('/statuses/new');
+        }
       }
     }).catch(error => {
       dispatch(deleteStatusFail(id, error));

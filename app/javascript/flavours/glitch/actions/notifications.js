@@ -25,6 +25,11 @@ export const NOTIFICATIONS_EXPAND_FAIL    = 'NOTIFICATIONS_EXPAND_FAIL';
 export const NOTIFICATIONS_CLEAR      = 'NOTIFICATIONS_CLEAR';
 export const NOTIFICATIONS_SCROLL_TOP = 'NOTIFICATIONS_SCROLL_TOP';
 
+export const NOTIFICATIONS_MOUNT   = 'NOTIFICATIONS_MOUNT';
+export const NOTIFICATIONS_UNMOUNT = 'NOTIFICATIONS_UNMOUNT';
+
+export const NOTIFICATIONS_SET_VISIBILITY = 'NOTIFICATIONS_SET_VISIBILITY';
+
 defineMessages({
   mention: { id: 'notification.mention', defaultMessage: '{name} mentioned you' },
 });
@@ -84,6 +89,7 @@ const noOp = () => {};
 export function expandNotifications({ maxId } = {}, done = noOp) {
   return (dispatch, getState) => {
     const notifications = getState().get('notifications');
+    const isLoadingMore = !!maxId;
 
     if (notifications.get('isLoading')) {
       done();
@@ -99,40 +105,43 @@ export function expandNotifications({ maxId } = {}, done = noOp) {
       params.since_id = notifications.getIn(['items', 0]);
     }
 
-    dispatch(expandNotificationsRequest());
+    dispatch(expandNotificationsRequest(isLoadingMore));
 
     api(getState).get('/api/v1/notifications', { params }).then(response => {
       const next = getLinks(response).refs.find(link => link.rel === 'next');
-      dispatch(expandNotificationsSuccess(response.data, next ? next.uri : null));
+      dispatch(expandNotificationsSuccess(response.data, next ? next.uri : null, isLoadingMore));
       fetchRelatedRelationships(dispatch, response.data);
       done();
     }).catch(error => {
-      dispatch(expandNotificationsFail(error));
+      dispatch(expandNotificationsFail(error, isLoadingMore));
       done();
     });
   };
 };
 
-export function expandNotificationsRequest() {
+export function expandNotificationsRequest(isLoadingMore) {
   return {
     type: NOTIFICATIONS_EXPAND_REQUEST,
+    skipLoading: !isLoadingMore,
   };
 };
 
-export function expandNotificationsSuccess(notifications, next) {
+export function expandNotificationsSuccess(notifications, next, isLoadingMore) {
   return {
     type: NOTIFICATIONS_EXPAND_SUCCESS,
     notifications,
     accounts: notifications.map(item => item.account),
     statuses: notifications.map(item => item.status).filter(status => !!status),
     next,
+    skipLoading: !isLoadingMore,
   };
 };
 
-export function expandNotificationsFail(error) {
+export function expandNotificationsFail(error, isLoadingMore) {
   return {
     type: NOTIFICATIONS_EXPAND_FAIL,
     error,
+    skipLoading: !isLoadingMore,
   };
 };
 
@@ -214,5 +223,24 @@ export function markNotificationForDelete(id, yes) {
 export function deleteMarkedNotificationsSuccess() {
   return {
     type: NOTIFICATIONS_DELETE_MARKED_SUCCESS,
+  };
+};
+
+export function mountNotifications() {
+  return {
+    type: NOTIFICATIONS_MOUNT,
+  };
+};
+
+export function unmountNotifications() {
+  return {
+    type: NOTIFICATIONS_UNMOUNT,
+  };
+};
+
+export function notificationsSetVisibility(visibility) {
+  return {
+    type: NOTIFICATIONS_SET_VISIBILITY,
+    visibility: visibility,
   };
 };

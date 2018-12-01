@@ -82,17 +82,13 @@ export default class HashtagTimeline extends React.PureComponent {
     this.props.dispatch(expandHashtagTimeline(this.props.params.id, { maxId }));
   }
 
-  shouldUpdateScroll = (prevRouterProps, { location }) => {
-    return !(location.state && location.state.mastodonModalOpen)
-  }
-
   render () {
     const { hasUnread, columnId, multiColumn } = this.props;
     const { id } = this.props.params;
     const pinned = !!columnId;
 
     return (
-      <Column ref={this.setRef} name='hashtag'>
+      <Column ref={this.setRef} name='hashtag' label={`#${id}`}>
         <ColumnHeader
           icon='hashtag'
           active={hasUnread}
@@ -110,7 +106,6 @@ export default class HashtagTimeline extends React.PureComponent {
           scrollKey={`hashtag_timeline-${columnId}`}
           timelineId={`hashtag:${id}`}
           onLoadMore={this.handleLoadMore}
-          shouldUpdateScroll={this.shouldUpdateScroll}
           emptyMessage={<FormattedMessage id='empty_column.hashtag' defaultMessage='There is nothing in this hashtag yet.' />}
         />
       </Column>

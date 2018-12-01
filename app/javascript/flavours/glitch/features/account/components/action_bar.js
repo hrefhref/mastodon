@@ -2,9 +2,10 @@ import React from 'react';
 import ImmutablePropTypes from 'react-immutable-proptypes';
 import PropTypes from 'prop-types';
 import DropdownMenuContainer from 'flavours/glitch/containers/dropdown_menu_container';
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { defineMessages, injectIntl, FormattedMessage, FormattedNumber } from 'react-intl';
-import { me } from 'flavours/glitch/util/initial_state';
+import { me, isStaff } from 'flavours/glitch/util/initial_state';
+import { profileLink, accountAdminLink } from 'flavours/glitch/util/backend_links';
 
 const messages = defineMessages({
   mention: { id: 'account.mention', defaultMessage: 'Mention @{name}' },
@@ -25,6 +26,8 @@ const messages = defineMessages({
   showReblogs: { id: 'account.show_reblogs', defaultMessage: 'Show boosts from @{name}' },
   endorse: { id: 'account.endorse', defaultMessage: 'Feature on profile' },
   unendorse: { id: 'account.unendorse', defaultMessage: 'Don\'t feature on profile' },
+  add_or_remove_from_list: { id: 'account.add_or_remove_from_list', defaultMessage: 'Add or Remove from lists' },
+  admin_account: { id: 'status.admin_account', defaultMessage: 'Open moderation interface for @{name}' },
 });
 
 @injectIntl
@@ -42,6 +45,7 @@ export default class ActionBar extends React.PureComponent {
     onBlockDomain: PropTypes.func.isRequired,
     onUnblockDomain: PropTypes.func.isRequired,
     onEndorseToggle: PropTypes.func.isRequired,
+    onAddToList: PropTypes.func.isRequired,
     intl: PropTypes.object.isRequired,
   };
 
@@ -49,6 +53,13 @@ export default class ActionBar extends React.PureComponent {
     navigator.share({
       url: this.props.account.get('url'),
     });
+  }
+
+  isStatusesPageActive = (match, location) => {
+    if (!match) {
+      return false;
+    }
+    return !location.pathname.match(/\/(followers|following)\/?$/);
   }
 
   render () {
@@ -67,7 +78,9 @@ export default class ActionBar extends React.PureComponent {
     menu.push(null);
 
     if (account.get('id') === me) {
-      menu.push({ text: intl.formatMessage(messages.edit_profile), href: '/settings/profile' });
+      if (profileLink !== undefined) {
+        menu.push({ text: intl.formatMessage(messages.edit_profile), href: profileLink });
+      }
     } else {
       if (account.getIn(['relationship', 'following'])) {
         if (account.getIn(['relationship', 'showing_reblogs'])) {
@@ -77,6 +90,7 @@ export default class ActionBar extends React.PureComponent {
         }
 
         menu.push({ text: intl.formatMessage(account.getIn(['relationship', 'endorsed']) ? messages.unendorse : messages.endorse), action: this.props.onEndorseToggle });
+        menu.push({ text: intl.formatMessage(messages.add_or_remove_from_list), action: this.props.onAddToList });
         menu.push(null);
       }
 
@@ -120,6 +134,14 @@ export default class ActionBar extends React.PureComponent {
       }
     }
 
+    if (account.get('id') !== me && isStaff && (accountAdminLink !== undefined)) {
+      menu.push(null);
+      menu.push({
+        text: intl.formatMessage(messages.admin_account, { name: account.get('username') }),
+        href: accountAdminLink(account.get('id')),
+      });
+    }
+
     return (
       <div>
         {extraInfo}
@@ -130,20 +152,20 @@ export default class ActionBar extends React.PureComponent {
           </div>
 
           <div className='account__action-bar-links'>
-            <Link className='account__action-bar__tab' to={`/accounts/${account.get('id')}`}>
+            <NavLink isActive={this.isStatusesPageActive} activeClassName='active' className='account__action-bar__tab' to={`/accounts/${account.get('id')}`}>
               <FormattedMessage id='account.posts' defaultMessage='Posts' />
               <strong><FormattedNumber value={account.get('statuses_count')} /></strong>
-            </Link>
+            </NavLink>
 
-            <Link className='account__action-bar__tab' to={`/accounts/${account.get('id')}/following`}>
+            <NavLink exact activeClassName='active' className='account__action-bar__tab' to={`/accounts/${account.get('id')}/following`}>
               <FormattedMessage id='account.follows' defaultMessage='Follows' />
               <strong><FormattedNumber value={account.get('following_count')} /></strong>
-            </Link>
+            </NavLink>
 
-            <Link className='account__action-bar__tab' to={`/accounts/${account.get('id')}/followers`}>
+            <NavLink exact activeClassName='active' className='account__action-bar__tab' to={`/accounts/${account.get('id')}/followers`}>
               <FormattedMessage id='account.followers' defaultMessage='Followers' />
               <strong><FormattedNumber value={account.get('followers_count')} /></strong>
-            </Link>
+            </NavLink>
           </div>
         </div>
       </div>
